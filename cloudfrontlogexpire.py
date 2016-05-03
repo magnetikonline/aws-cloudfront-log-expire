@@ -89,9 +89,12 @@ def read_arguments():
 		exit_error('Must specify log archive expiry as one of --expire-before or --expire-days')
 
 	# return arguments
-	return \
-		args_list.s3_bucket_name,s3_bucket_log_prefix_path, \
-		access_log_expire_before,args_list.progress,args_list.commit
+	return (
+		args_list.s3_bucket_name,
+		s3_bucket_log_prefix_path,
+		access_log_expire_before,
+		args_list.progress,args_list.commit
+	)
 
 def process_bucket(
 	log_bucket,s3_bucket_log_prefix_path,
