@@ -9,6 +9,7 @@ import boto.s3.connection as s3
 
 CLOUDTRAIL_ACCESS_LOG_REGEXP = re.compile(r'(^|\/)[A-Z0-9]{13,14}\.[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}\.[a-f0-9]{8}\.gz$')
 BOTO_S3_OBJECT_LAST_MODIFIED_REGEXP = re.compile(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T')
+S3_OBJECT_DELETE_QUEUE_LIMIT = 1000
 
 
 def exit_error(message):
@@ -31,13 +32,13 @@ def read_arguments():
 	args_list = parser.parse_args()
 
 	# validate source S3 bucket name
-	if (re.search(r'^[a-z0-9][a-z0-9-.]{1,61}[a-z0-9]$',args_list.s3_bucket_name) is None):
+	if (not re.search(r'^[a-z0-9][a-z0-9-.]{1,61}[a-z0-9]$',args_list.s3_bucket_name)):
 		exit_error('Invalid source S3 bucket name [{0}]'.format(args_list.s3_bucket_name))
 
 	# validate source bucket log prefix
 	s3_bucket_log_prefix_path = None
 	if (args_list.s3_bucket_log_prefix is not None):
-		if (re.search(r'^[a-z0-9-./]+$',args_list.s3_bucket_log_prefix) is None):
+		if (not re.search(r'^[a-z0-9-./]+$',args_list.s3_bucket_log_prefix)):
 			exit_error('Invalid S3 bucket path log prefix [{0}]'.format(args_list.s3_bucket_log_prefix))
 
 		# validated - remove leading/trailing forward slashes and add final trailing slash
@@ -54,7 +55,7 @@ def read_arguments():
 	if (args_list.expire_before is not None):
 		# validate format of given expiry date
 		expire_date_match = re.search(r'^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})$',args_list.expire_before)
-		if (expire_date_match is None):
+		if (not expire_date_match):
 			exit_error('Invalid format for expire before date, expected YYYY-MM-DD')
 
 		# fetch date parts
@@ -78,7 +79,7 @@ def read_arguments():
 
 	elif (args_list.expire_days is not None):
 		# ensure day count given as a positive integer
-		if (re.search(r'^[1-9][0-9]{0,20}$',args_list.expire_days) is None):
+		if (not re.search(r'^[1-9][0-9]{0,20}$',args_list.expire_days)):
 			exit_error('Invalid value for expire days [{0}]'.format(args_list.expire_days))
 
 		# calculate expiry date from current date
@@ -93,30 +94,49 @@ def read_arguments():
 		args_list.s3_bucket_name,
 		s3_bucket_log_prefix_path,
 		access_log_expire_before,
-		args_list.progress,args_list.commit
+		args_list.progress,
+		args_list.commit
 	)
 
 def process_bucket(
 	log_bucket,s3_bucket_log_prefix_path,
-	access_log_expire_before,show_progress,delete_expired
+	access_log_expire_before,
+	show_progress,delete_expired
 ):
-	# init counters
+	# init counters/lists
 	archive_seen_count = 0
 	archive_delete_count = 0
+	delete_object_key_queue = []
 	bucket_list_prefix = '' if (s3_bucket_log_prefix_path is None) else s3_bucket_log_prefix_path
+
+	def queue_delete_object(object_key,force_delete = False):
+		# add bucket object to delete queue
+		if (object_key):
+			delete_object_key_queue.append(object_key)
+
+		# is queue at limit?
+		queue_length = len(delete_object_key_queue)
+
+		if (
+			(force_delete and (queue_length > 0)) or
+			(queue_length >= S3_OBJECT_DELETE_QUEUE_LIMIT)
+		):
+			# send delete operation to S3 bucket then truncate queue
+			log_bucket.delete_keys(delete_object_key_queue,quiet = True)
+			del delete_object_key_queue[:]
 
 	# iterate over bucket objects (keys) looking for CloudFront access log archive matches
 	for bucket_object_item in log_bucket.list(prefix = bucket_list_prefix):
 		object_item_key = bucket_object_item.key
 
-		if (CLOUDTRAIL_ACCESS_LOG_REGEXP.search(object_item_key) is None):
+		if (not CLOUDTRAIL_ACCESS_LOG_REGEXP.search(object_item_key)):
 			# S3 object is not a CloudTrail access log archive to be considered
 			continue
 
 		# extract last modified date
 		access_log_last_modified = get_boto_s3_object_last_modified_date(bucket_object_item.last_modified)
-		if (access_log_last_modified is False):
-			# unable to extract date
+		if (not access_log_last_modified):
+			# unable to extract date from object
 			continue
 
 		# modified date of access log before expire cutoff?
@@ -137,7 +157,10 @@ def process_bucket(
 
 			if (delete_expired):
 				# actually delete the access log object
-				log_bucket.delete_key(object_item_key)
+				queue_delete_object(object_item_key)
+
+	# final call to delete any remaining queue items
+	queue_delete_object(None,True)
 
 	# return counters
 	return archive_seen_count,archive_delete_count
@@ -145,9 +168,9 @@ def process_bucket(
 def get_boto_s3_object_last_modified_date(boto_datetime):
 	datetime_match = BOTO_S3_OBJECT_LAST_MODIFIED_REGEXP.search(boto_datetime)
 
-	if (datetime_match is None):
+	if (not datetime_match):
 		# unable to extract date from given timestamp
-		return False
+		return None
 
 	# create date object (don't care about time) and return
 	return datetime.date(
@@ -158,8 +181,13 @@ def get_boto_s3_object_last_modified_date(boto_datetime):
 
 def main():
 	# fetch CLI arguments
-	s3_bucket_name,s3_bucket_log_prefix_path, \
-	access_log_expire_before,show_progress,delete_expired = read_arguments()
+	(
+		s3_bucket_name,
+		s3_bucket_log_prefix_path,
+		access_log_expire_before,
+		show_progress,
+		delete_expired
+	) = read_arguments()
 
 	# create connection to S3 bucket
 	s3_connection = s3.S3Connection()
@@ -175,23 +203,23 @@ def main():
 	if (s3_bucket_log_prefix_path is not None):
 		print('Log prefix path: {0}'.format(s3_bucket_log_prefix_path))
 
-	print('Delete logs prior to: {0}'.format(access_log_expire_before.strftime('%Y-%m-%d')))
-	print # linefeed
+	print('Delete logs prior to: {0}\n'.format(access_log_expire_before.strftime('%Y-%m-%d')))
 
-	# process the bucket
+	# process bucket
 	archive_seen_count,archive_delete_count = process_bucket(
 		log_bucket,s3_bucket_log_prefix_path,
-		access_log_expire_before,show_progress,delete_expired
+		access_log_expire_before,
+		show_progress,delete_expired
 	)
 
 	# write summary details
-	print
-	print('Total archive count: {0}'.format(archive_seen_count))
+	print('\nTotal archive count: {0}'.format(archive_seen_count))
 	print('Archives deleted: {0}'.format(archive_delete_count))
 	print('Remaining: {0}'.format(archive_seen_count - archive_delete_count))
 
 	# finished successfully
 	sys.exit(0)
+
 
 if (__name__ == '__main__'):
 	main()
