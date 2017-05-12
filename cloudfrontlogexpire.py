@@ -7,7 +7,7 @@ import re
 import sys
 import boto.s3.connection as s3
 
-CLOUDTRAIL_ACCESS_LOG_REGEXP = re.compile(r'(^|\/)[A-Z0-9]{13,14}\.[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}\.[a-f0-9]{8}\.gz$')
+CLOUDTRAIL_ACCESS_LOG_REGEXP = re.compile(r'(^|\/)[A-Z0-9]{13,14}\.[0-9]{4}-[0-1][0-9]-[0-3][0-9]-[0-9]{2}\.[a-f0-9]{8}\.gz$')
 BOTO_S3_OBJECT_LAST_MODIFIED_REGEXP = re.compile(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T')
 S3_OBJECT_DELETE_QUEUE_LIMIT = 1000
 
@@ -109,7 +109,7 @@ def process_bucket(
 	delete_object_key_queue = []
 	bucket_list_prefix = '' if (s3_bucket_log_prefix_path is None) else s3_bucket_log_prefix_path
 
-	def queue_delete_object(object_key,force_delete = False):
+	def queue_object_delete(object_key = None,force_delete = False):
 		# add bucket object to delete queue
 		if (object_key):
 			delete_object_key_queue.append(object_key)
@@ -140,30 +140,30 @@ def process_bucket(
 			continue
 
 		# modified date of access log before expire cutoff?
-		delete_access_log = (access_log_last_modified < access_log_expire_before)
+		delete_log = (access_log_last_modified < access_log_expire_before)
 		archive_seen_count += 1
 
 		# display delete/keep object decision
 		if (show_progress):
 			print('{0} - {1}{2}'.format(
 				object_item_key,
-				'DELETE' if (delete_access_log) else 'KEEP',
+				'DELETE' if (delete_log) else 'KEEP',
 				'' if (delete_expired) else ' (DRY RUN)'
 			))
 
 		# delete access log object from S3
-		if (delete_access_log):
+		if (delete_log):
 			archive_delete_count += 1
 
 			if (delete_expired):
 				# actually delete the access log object
-				queue_delete_object(object_item_key)
+				queue_object_delete(object_item_key)
 
 	# final call to delete any remaining queue items
-	queue_delete_object(None,True)
+	queue_object_delete(force_delete = True)
 
 	# return counters
-	return archive_seen_count,archive_delete_count
+	return (archive_seen_count,archive_delete_count)
 
 def get_boto_s3_object_last_modified_date(boto_datetime):
 	datetime_match = BOTO_S3_OBJECT_LAST_MODIFIED_REGEXP.search(boto_datetime)
