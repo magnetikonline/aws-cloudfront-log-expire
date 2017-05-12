@@ -30,8 +30,7 @@ optional arguments:
   --expire-days DAY_COUNT
                         expire log archives older than X number of days
   --progress            display progress of access log archive processing
-  --commit              delete access log archives based on expire criteria,
-                        otherwise simulation only
+  --commit              delete access log archives, otherwise simulation only
 ```
 
 Notes:

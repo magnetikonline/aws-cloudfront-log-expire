@@ -27,7 +27,7 @@ def read_arguments():
 	parser.add_argument('--expire-days',help = 'expire log archives older than X number of days',metavar = 'DAY_COUNT')
 
 	parser.add_argument('--progress',action = 'store_true',help = 'display progress of access log archive processing')
-	parser.add_argument('--commit',action = 'store_true',help = 'delete access log archives based on expire criteria, otherwise simulation only')
+	parser.add_argument('--commit',action = 'store_true',help = 'delete access log archives, otherwise simulation only')
 
 	args_list = parser.parse_args()
 
