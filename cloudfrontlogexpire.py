@@ -107,7 +107,11 @@ def process_bucket(
 	archive_seen_count = 0
 	archive_delete_count = 0
 	delete_object_key_queue = []
-	bucket_list_prefix = '' if (s3_bucket_log_prefix_path is None) else s3_bucket_log_prefix_path
+	bucket_list_prefix = (
+		''
+		if (not s3_bucket_log_prefix_path)
+		else s3_bucket_log_prefix_path
+	)
 
 	def queue_object_delete(object_key = None,force_delete = False):
 		# add bucket object to delete queue
@@ -118,7 +122,7 @@ def process_bucket(
 		queue_length = len(delete_object_key_queue)
 
 		if (
-			(force_delete and (queue_length > 0)) or
+			(force_delete and queue_length) or
 			(queue_length >= S3_OBJECT_DELETE_QUEUE_LIMIT)
 		):
 			# send delete operation to S3 bucket then truncate queue
@@ -156,7 +160,7 @@ def process_bucket(
 			archive_delete_count += 1
 
 			if (delete_expired):
-				# actually delete the access log object
+				# delete the access log object (not dry-run)
 				queue_object_delete(object_item_key)
 
 	# final call to delete any remaining queue items
@@ -198,12 +202,12 @@ def main():
 		exit_error('Unable to open requested S3 bucket - does not exist or insufficient permissions [{0}]'.format(s3_bucket_name))
 
 	# print details of where we are scanning
-	print('Processing S3 bucket: {0}'.format(s3_bucket_name))
+	print('Processing S3 bucket [{0}]'.format(s3_bucket_name))
 
-	if (s3_bucket_log_prefix_path is not None):
-		print('Log prefix path: {0}'.format(s3_bucket_log_prefix_path))
+	if (s3_bucket_log_prefix_path):
+		print('Log prefix path [{0}]'.format(s3_bucket_log_prefix_path))
 
-	print('Delete logs prior to: {0}\n'.format(access_log_expire_before.strftime('%Y-%m-%d')))
+	print('Deleting logs prior to [{0}]\n'.format(access_log_expire_before.strftime('%Y-%m-%d')))
 
 	# process bucket
 	archive_seen_count,archive_delete_count = process_bucket(
@@ -213,12 +217,14 @@ def main():
 	)
 
 	# write summary details
-	print('\nTotal archive count: {0}'.format(archive_seen_count))
-	print('Archives deleted: {0}'.format(archive_delete_count))
-	print('Remaining: {0}'.format(archive_seen_count - archive_delete_count))
+	print('\nTotal archive count [{0}]'.format(archive_seen_count))
 
-	# finished successfully
-	sys.exit(0)
+	print('Archives deleted [{0}]{1}'.format(
+		archive_delete_count,
+		'' if (delete_expired) else ' (DRY RUN)'
+	))
+
+	print('Remaining [{0}]'.format(archive_seen_count - archive_delete_count))
 
 
 if (__name__ == '__main__'):
