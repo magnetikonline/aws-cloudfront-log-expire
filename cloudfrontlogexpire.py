@@ -18,16 +18,48 @@ def exit_error(message):
 
 def read_arguments():
 	# create parser
-	parser = argparse.ArgumentParser(description = 'Remove AWS CloudFront access log archives from an S3 bucket before a given date or number of expiry days.')
+	parser = argparse.ArgumentParser(
+		description =
+			'Remove AWS CloudFront access log archives from an '
+			'S3 bucket before a given date or number of expiry days'
+	)
 
-	parser.add_argument('--s3-bucket-name',help = 'S3 bucket holding CloudFront access log archives',metavar = 'NAME',required = True)
-	parser.add_argument('--s3-bucket-log-prefix',help = 'S3 bucket path prefix to access log archives',metavar = 'PREFIX')
+	parser.add_argument(
+		'--s3-bucket-name',
+		help = 'S3 bucket holding CloudFront access log archives',
+		metavar = 'NAME',
+		required = True
+	)
 
-	parser.add_argument('--expire-before',help = 'expire log archives before given date',metavar = 'YYYY-MM-DD')
-	parser.add_argument('--expire-days',help = 'expire log archives older than X number of days',metavar = 'DAY_COUNT')
+	parser.add_argument(
+		'--s3-bucket-log-prefix',
+		help = 'S3 bucket path prefix to access log archives',
+		metavar = 'PREFIX'
+	)
 
-	parser.add_argument('--progress',action = 'store_true',help = 'display progress of access log archive processing')
-	parser.add_argument('--commit',action = 'store_true',help = 'delete access log archives, otherwise simulation only')
+	parser.add_argument(
+		'--expire-before',
+		help = 'expire log archives before given date',
+		metavar = 'YYYY-MM-DD'
+	)
+
+	parser.add_argument(
+		'--expire-days',
+		help = 'expire log archives older than X number of days',
+		metavar = 'DAY_COUNT'
+	)
+
+	parser.add_argument(
+		'--progress',
+		action = 'store_true',
+		help = 'display progress of access log archive processing'
+	)
+
+	parser.add_argument(
+		'--commit',
+		action = 'store_true',
+		help = 'delete access log archives, otherwise simulation only'
+	)
 
 	args_list = parser.parse_args()
 
