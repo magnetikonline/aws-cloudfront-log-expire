@@ -1,11 +1,12 @@
 # AWS CloudFront log expire
+
 Processes an S3 bucket configured as a [CloudFront](https://aws.amazon.com/cloudfront/) distribution access log target - removing all access log objects prior to a specified expiry date or days.
 
 - For safety, will only consider objects for deletion that meet the CloudFront access log naming format.
 - By default will only _simulate_ the processing of logs before actual removal from S3 (providing the `--commit` argument will enable actual deletes).
 - Can optionally display script processing output back to the users terminal.
 - Requires [Boto 2](https://github.com/boto/boto).
-- AWS credentials expected to be provided either via shell environment variables or the usual places [Boto will check](http://boto.cloudhackers.com/en/latest/boto_config_tut.html).
+- AWS credentials expected to be provided either via shell environment variables or the usual places [Boto will check](https://boto.cloudhackers.com/en/latest/boto_config_tut.html).
 
 ## Usage
 
@@ -34,5 +35,6 @@ optional arguments:
 ```
 
 Notes:
-- Must specify one of `--expire-before` or `--expire-days`, but not both.
+
+- Must specify one of `--expire-before` or `--expire-days` - not both.
 - Script will *never* delete bucket objects unless the `--commit` argument is provided.
